@@ -3,7 +3,7 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
-const { COOKIES_PATH, OUTPUT_DIR } = require("./config");
+const { getCookiesPath, getOutputDir, getDataDir } = require("./config");
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -38,11 +38,29 @@ ipcMain.handle("download", async (event, { profile, mode }) => {
   if (!clean) return { ok: false, message: "Escribí un nombre de perfil." };
 
   if (!/^[a-zA-Z0-9._]+$/.test(clean)) {
-    return { ok: false, message: "Nombre inválido. Usá letras, números, punto o guión bajo." };
+    return {
+      ok: false,
+      message: "Nombre inválido. Usá letras, números, punto o guión bajo.",
+    };
   }
 
+  // ✅ Rutas correctas según dev vs dist
+  const DATA_DIR = getDataDir();
+  const COOKIES_PATH = getCookiesPath();
+  const OUTPUT_DIR = getOutputDir();
+
+  // ✅ Asegurar carpetas escribibles (en dist NO usar __dirname/app.asar)
+  fs.mkdirSync(path.join(DATA_DIR, "cookies"), { recursive: true });
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+
   if (!fs.existsSync(COOKIES_PATH)) {
-    return { ok: false, message: `No encuentro cookies en:\n${COOKIES_PATH}` };
+    return {
+      ok: false,
+      message:
+        `No encuentro cookies en:\n${COOKIES_PATH}\n\n` +
+        `Tip: colocá el archivo www.instagram.com_cookies.txt dentro de:\n` +
+        `${path.join(DATA_DIR, "cookies")}`,
+    };
   }
 
   // ✅ carpeta por usuario
@@ -60,6 +78,9 @@ ipcMain.handle("download", async (event, { profile, mode }) => {
   args.push(url);
 
   event.sender.send("download:log", `> gallery-dl ${args.join(" ")}\n\n`);
+  event.sender.send("download:log", `[DATA_DIR] ${DATA_DIR}\n`);
+  event.sender.send("download:log", `[COOKIES] ${COOKIES_PATH}\n`);
+  event.sender.send("download:log", `[OUTPUT ] ${OUTPUT_DIR}\n\n`);
 
   return await new Promise((resolve) => {
     // ✅ IMPORTANTE: sin shell para que Windows no rompa el --filter

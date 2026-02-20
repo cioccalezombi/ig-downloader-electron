@@ -10,7 +10,7 @@
   "build": {
     "appId": "com.federico.igdownloader",
     "productName": "IG Downloader",
-    "icon": "build/ig-downloader-electron.ico",
+    "icon": "build/ico.ico",
     "directories": {
       "output": "dist"
     },
