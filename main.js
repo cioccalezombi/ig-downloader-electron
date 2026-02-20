@@ -10,12 +10,12 @@ function createWindow() {
     width: 520,
     height: 800,
     resizable: false,
+    autoHideMenuBar: true,
+    menuBarVisible: false,
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js"),
     },
-    autoHideMenuBar: true,
-    menuBarVisible: false,
   });
 
   win.loadFile("index.html");
@@ -38,45 +38,37 @@ ipcMain.handle("download", async (event, { profile, mode }) => {
   if (!clean) return { ok: false, message: "Escribí un nombre de perfil." };
 
   if (!/^[a-zA-Z0-9._]+$/.test(clean)) {
-    return {
-      ok: false,
-      message: "Nombre inválido. Usá letras, números, punto o guión bajo.",
-    };
+    return { ok: false, message: "Nombre inválido. Usá letras, números, punto o guión bajo." };
   }
 
   if (!fs.existsSync(COOKIES_PATH)) {
     return { ok: false, message: `No encuentro cookies en:\n${COOKIES_PATH}` };
   }
 
-  const path = require("path"); // (si no está ya arriba del main.js)
-
-  const url = `https://www.instagram.com/${clean}/`;
+  // ✅ carpeta por usuario
   const userDir = path.join(OUTPUT_DIR, clean);
   fs.mkdirSync(userDir, { recursive: true });
+
+  const url = `https://www.instagram.com/${clean}/`;
+
   const args = ["--cookies", COOKIES_PATH, "-D", userDir];
-  if (mode === "photos")
-    args.push(
-      "--filter",
-      "extension == 'jpg' || extension == 'jpeg' || extension == 'png'",
-    );
-  if (mode === "videos") args.push("--filter", "extension == 'mp4'");
+
+  // ✅ filtros robustos (IG a veces sirve webp / m4v)
+  if (mode === "photos") args.push("--filter", "extension in ('jpg','jpeg','png','webp')");
+  if (mode === "videos") args.push("--filter", "extension in ('mp4','m4v')");
 
   args.push(url);
 
   event.sender.send("download:log", `> gallery-dl ${args.join(" ")}\n\n`);
 
   return await new Promise((resolve) => {
-    const proc = spawn("gallery-dl", args, { shell: true });
+    // ✅ IMPORTANTE: sin shell para que Windows no rompa el --filter
+    const proc = spawn("gallery-dl", args, { shell: false, windowsHide: true });
 
-    proc.stdout.on("data", (d) =>
-      event.sender.send("download:log", d.toString()),
-    );
-    proc.stderr.on("data", (d) =>
-      event.sender.send("download:log", d.toString()),
-    );
+    proc.stdout.on("data", (d) => event.sender.send("download:log", d.toString()));
+    proc.stderr.on("data", (d) => event.sender.send("download:log", d.toString()));
 
     proc.on("close", (code) => {
-      // Tratamos 0 y 64 como OK
       const ok = code === 0 || code === 64;
 
       if (ok) {
@@ -88,7 +80,7 @@ ipcMain.handle("download", async (event, { profile, mode }) => {
           ok: false,
           message:
             `Falló (code ${code}).\n\n` +
-            `Tip: abrí Instagram en el navegador, asegurate de estar logueado, re-exportá cookies.\n\n` +
+            `Tip: re-exportá cookies si Instagram te corta la sesión.\n\n` +
             `Guardado en:\n${userDir}`,
         });
       }
